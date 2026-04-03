@@ -9,12 +9,12 @@ module.exports = fp(async function (fastify, opts) {
     throw new Error("USERS_SERVICE_URL is required in .env");
   }
 
-  const prefix = `/${API_PREFIX || "api"}/auth`;
+  const prefix = `/${API_PREFIX || "api"}/users`;
 
   fastify.register(require("@fastify/http-proxy"), {
     upstream: USERS_SERVICE_URL,
     prefix: prefix,
-    rewritePrefix: "/auth",
+    rewritePrefix: "/users",
     http2: false,
     acceptExposedHeaders: ["Set-Cookie", "Authorization"],
     disableCache: true,

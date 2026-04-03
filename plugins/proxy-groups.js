@@ -1,31 +1,34 @@
-'use strict'
+"use strict";
 
-const fp = require('fastify-plugin')
+const fp = require("fastify-plugin");
 
 module.exports = fp(async function (fastify, opts) {
-  const { GROUPS_SERVICE_URL, API_PREFIX } = process.env
+  const { GROUPS_SERVICE_URL, API_PREFIX } = process.env;
 
   if (!GROUPS_SERVICE_URL) {
-    throw new Error('GROUPS_SERVICE_URL is required in .env')
+    throw new Error("GROUPS_SERVICE_URL is required in .env");
   }
 
-  const prefix = `/${API_PREFIX || 'api'}/groups`
+  const prefix = `/${API_PREFIX || "api"}/groups`;
 
-  fastify.register(require('@fastify/http-proxy'), {
+  fastify.register(require("@fastify/http-proxy"), {
     upstream: GROUPS_SERVICE_URL,
     prefix: prefix,
-    rewritePrefix: '/groups',
+    rewritePrefix: "/groups",
     http2: false,
-    acceptExposedHeaders: ['Set-Cookie'],
+    acceptExposedHeaders: ["Set-Cookie", "Authorization"],
     disableCache: true,
     replyOptions: {
       rewriteRequestHeaders: (originalReq, headers) => {
+        const cookies = originalReq.headers.cookie || "";
+        const authHeader = originalReq.headers.authorization || "";
+
         return {
           ...headers,
-          cookie: originalReq.headers.cookie || '',
-          authorization: originalReq.headers.authorization || ''
-        }
-      }
-    }
-  })
-})
+          cookie: cookies,
+          authorization: authHeader,
+        };
+      },
+    },
+  });
+});
