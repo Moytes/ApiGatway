@@ -8,6 +8,7 @@ const AutoLoad = require('@fastify/autoload')
 const options = {}
 
 module.exports = async function (fastify, opts) {
+  // Cargar plugins automáticamente (incluye sse-events.js)
   fastify.register(AutoLoad, {
     dir: path.join(__dirname, 'plugins'),
     options: Object.assign({}, opts)
