@@ -21,13 +21,45 @@ module.exports = fp(async function (fastify, opts) {
     replyOptions: {
       rewriteRequestHeaders: (originalReq, headers) => {
         const cookies = originalReq.headers.cookie || "";
-        const authHeader = originalReq.headers.authorization || "";
+        let authHeader = originalReq.headers.authorization || "";
+
+        console.log("[PROXY-GROUPS] Request:", {
+          method: originalReq.method,
+          path: originalReq.url,
+          hasCookie: !!cookies,
+          hasAuthHeader: !!authHeader,
+        });
+
+        // Si hay cookie pero no hay authHeader, extraer el token de la cookie
+        if (!authHeader && cookies) {
+          const cookieParts = cookies.split(';').map(c => c.trim());
+          const authCookie = cookieParts.find(c => c.startsWith('Authentication='));
+          if (authCookie) {
+            const token = authCookie.substring('Authentication='.length);
+            authHeader = `Bearer ${decodeURIComponent(token)}`;
+            console.log("[PROXY-GROUPS] Token extracted from cookie:", {
+              tokenLength: token.length,
+              tokenPreview: token.substring(0, 30) + "..."
+            });
+          }
+        }
 
         return {
           ...headers,
-          cookie: cookies,
+          cookie: "",  // No necesitamos la cookie, solo el header Authorization
           authorization: authHeader,
+          host: new URL(GROUPS_SERVICE_URL).host,
         };
+      },
+      getProxyResponseHeaders: (proxyRes) => {
+        const headers = {};
+        if (proxyRes.headers["content-type"]) {
+          headers["content-type"] = proxyRes.headers["content-type"];
+        }
+        if (proxyRes.headers["authorization"]) {
+          headers["authorization"] = proxyRes.headers["authorization"];
+        }
+        return headers;
       },
     },
   });

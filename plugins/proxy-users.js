@@ -2,11 +2,7 @@
 
 const fp = require("fastify-plugin");
 
-// Rutas GET cacheables para el proxy de /users
-const CACHEABLE_PATHS = new Set([
-  '/api/users',
-  '/api/users/permissions/list',
-]);
+const CACHEABLE_PATHS = new Set(["/api/users", "/api/users/permissions/list"]);
 
 module.exports = fp(async function (fastify, opts) {
   const { USERS_SERVICE_URL, API_PREFIX } = process.env;
@@ -27,46 +23,69 @@ module.exports = fp(async function (fastify, opts) {
     replyOptions: {
       rewriteRequestHeaders: (originalReq, headers) => {
         const cookies = originalReq.headers.cookie || "";
-        const authHeader = originalReq.headers.authorization || "";
+        let authHeader = originalReq.headers.authorization || "";
+
+        // Si hay cookie pero no hay authHeader, extraer el token de la cookie
+        if (!authHeader && cookies) {
+          const cookieParts = cookies.split(';').map(c => c.trim());
+          const authCookie = cookieParts.find(c => c.startsWith('Authentication='));
+          if (authCookie) {
+            const token = authCookie.substring('Authentication='.length);
+            authHeader = `Bearer ${decodeURIComponent(token)}`;
+          }
+        }
+
         return {
           ...headers,
-          cookie: cookies,
+          cookie: "",
           authorization: authHeader,
+          host: new URL(USERS_SERVICE_URL).host,
         };
       },
-
-      // onResponse(request, reply, res) — firma de @fastify/reply-from
+      getProxyResponseHeaders: (proxyRes) => {
+        const headers = {};
+        if (proxyRes.headers["content-type"]) {
+          headers["content-type"] = proxyRes.headers["content-type"];
+        }
+        if (proxyRes.headers["authorization"]) {
+          headers["authorization"] = proxyRes.headers["authorization"];
+        }
+        return headers;
+      },
       onResponse: (request, reply, res) => {
-        const urlPath = request.url?.split('?')[0] || '';
+        const urlPath = request.url?.split("?")[0] || "";
         const statusCode = res.statusCode;
 
-        // ── Guardar en CACHÉ si GET 200 en ruta cacheable ──
-        if (request.method === 'GET' && statusCode === 200 && CACHEABLE_PATHS.has(urlPath)) {
+        if (
+          request.method === "GET" &&
+          statusCode === 200 &&
+          CACHEABLE_PATHS.has(urlPath)
+        ) {
           const chunks = [];
-          res.stream.on('data', (chunk) => chunks.push(chunk));
-          res.stream.on('end', () => {
+          res.stream.on("data", (chunk) => chunks.push(chunk));
+          res.stream.on("end", () => {
             try {
-              const body = Buffer.concat(chunks).toString('utf8');
-              const authHeader = request.headers.authorization || '';
+              const body = Buffer.concat(chunks).toString("utf8");
+              const authHeader = request.headers.authorization || "";
               fastify.cache.set(urlPath, authHeader, body);
-              reply.header('X-Cache', 'MISS').code(statusCode).send(body);
+              reply.header("X-Cache", "MISS").code(statusCode).send(body);
             } catch (e) {
-              reply.code(statusCode).send('');
+              reply.code(statusCode).send("");
             }
           });
-          res.stream.on('error', () => reply.code(statusCode).send(''));
-          return; // IMPORTANTE: no llamar reply.send abajo
+          res.stream.on("error", () => reply.code(statusCode).send(""));
+          return;
         }
 
-        // ── Invalidar caché tras escrituras exitosas ──
-        if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(request.method) && statusCode < 400) {
-          // Cualquier escritura en /users invalida la lista
-          fastify.cache.invalidate('/api/users');
-          fastify.cache.invalidate('/api/auth/me');
-          fastify.cache.invalidate('/api/auth/permissions');
+        if (
+          ["POST", "PATCH", "PUT", "DELETE"].includes(request.method) &&
+          statusCode < 400
+        ) {
+          fastify.cache.invalidate("/api/users");
+          fastify.cache.invalidate("/api/auth/me");
+          fastify.cache.invalidate("/api/auth/permissions");
         }
 
-        // Respuesta normal (sin caché)
         reply.send(res.stream);
       },
     },

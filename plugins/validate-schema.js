@@ -22,8 +22,8 @@ function validateResponseSchema(body, expectedPrefix) {
     return { valid: false, error: "Missing or invalid intOpCode" };
   }
 
-  if (!body.data || !Array.isArray(body.data)) {
-    return { valid: false, error: "Missing or invalid data (must be array)" };
+  if (!body.data || (typeof body.data !== "object" && !Array.isArray(body.data))) {
+    return { valid: false, error: "Missing or invalid data (must be array or object)" };
   }
 
   const expectedPattern = new RegExp(`^${expectedPrefix}\\d{3}$`);
